@@ -88,29 +88,7 @@ def generate_candidate_grid(origins, destination, grid_size=5):
     
     # Remove duplicates
     candidates = list(set(candidates))
-    
-    # Filter: only keep candidates that are between origins and destination
-    # Check that candidate is not "behind" all origins (further from dest than all origins)
-    def distance_sq(p1, p2):
-        return (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2
-    
-    origin_distances = [distance_sq(origin, destination) for origin in origins]
-    max_origin_dist = max(origin_distances)
-    centroid_dist = distance_sq((centroid_lat, centroid_lng), destination)
-    
-    filtered = []
-    for candidate in candidates:
-        candidate_to_dest = distance_sq(candidate, destination)
-        # Keep if candidate is closer to destination than the centroid
-        # This ensures we're always making forward progress
-        if candidate_to_dest <= centroid_dist * 1.05:
-            filtered.append(candidate)
-    
-    # If filter removed too many, fall back to all candidates
-    if len(filtered) < 10:
-        return candidates
-    
-    return filtered
+    return candidates
 
 def get_drive_times(gmaps, origins, destinations, departure_time=None):
     """Get drive times matrix using Distance Matrix API."""
@@ -184,15 +162,17 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
     def distance_sq(p1, p2):
         return (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2
     
-    centroid_lat = np.mean([o[0] for o in origin_coords])
-    centroid_lng = np.mean([o[1] for o in origin_coords])
-    centroid_dist = distance_sq((centroid_lat, centroid_lng), dest_coord)
+    # Find the furthest origin from destination
+    origin_distances = [distance_sq(o, dest_coord) for o in origin_coords]
+    max_origin_dist = max(origin_distances)
     
     def is_valid_candidate(candidate):
-        """Check if candidate is between origins and destination (not backwards)."""
+        """Check if candidate doesn't make anyone go backwards."""
         candidate_to_dest = distance_sq(candidate, dest_coord)
-        # Must be closer to destination than centroid (making forward progress)
-        return candidate_to_dest <= centroid_dist * 1.05
+        # Must be closer to destination than the furthest origin
+        # This ensures at least one person isn't going backwards
+        # Small buffer (1.02) to allow for edge cases
+        return candidate_to_dest <= max_origin_dist * 1.02
     
     candidates = generate_candidate_grid(origin_coords, dest_coord, grid_size)
     
