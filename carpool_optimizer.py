@@ -309,19 +309,17 @@ with st.form("main_form"):
                                     ["Leave now", "Leave later"],
                                     horizontal=True)
         
-        leave_now = (departure_option == "Leave now")
-        
-        # Always show date/time inputs, but disable them if "Leave now" is selected
-        date = st.date_input("Date", value=now_denver.date(), disabled=leave_now)
+        # Always show date/time inputs (ignored if "Leave now" is selected)
+        date = st.date_input("Date", value=now_denver.date())
         
         default_time = now_denver.strftime("%H:%M")
         time_str = st.text_input("Time (24-hour format, e.g. 17:30 for 5:30 PM)", 
                                  value=default_time,
-                                 max_chars=5,
-                                 disabled=leave_now)
+                                 max_chars=5)
         
-        if leave_now:
+        if departure_option == "Leave now":
             departure_datetime = now_denver + timedelta(minutes=5)
+            st.caption("☝️ Date/time fields above will be ignored")
         else:
             # Validate time format
             try:
