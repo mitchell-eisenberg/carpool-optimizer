@@ -114,14 +114,20 @@ def calculate_meetup_cost(origin_times, destination_time, num_people, togetherne
     Calculate total cost with togetherness preference.
     
     togetherness = 0: minimize total person-time (meet near destination)
-    togetherness = 100: prioritize driving together (meet near origins)
+    togetherness = 100: maximize driving together (meet near origins)
     
-    The multiplier on group leg ranges from n (at 0%) to 1 (at 100%).
-    At 100%, the group drive only "counts once" regardless of passengers.
+    At 0%: cost = sum(individual) + n * group  (standard model)
+    At 100%: cost = heavily penalized individual + ignored group
     """
     togetherness_factor = togetherness / 100.0
-    group_multiplier = num_people - togetherness_factor * (num_people - 1)
-    return sum(origin_times) + (group_multiplier * destination_time)
+    
+    # As togetherness increases, penalize individual driving more
+    individual_weight = 1 + togetherness_factor * num_people
+    
+    # As togetherness increases, reduce group leg penalty toward zero
+    group_weight = num_people * (1 - togetherness_factor)
+    
+    return individual_weight * sum(origin_times) + group_weight * destination_time
 
 def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_size=5, refine_iterations=2, togetherness=50):
     """Find optimal meetup point using grid search with refinement."""
