@@ -8,6 +8,20 @@ from streamlit_folium import st_folium
 # Page config
 st.set_page_config(page_title="Carpool Meetup Optimizer", page_icon="🚗", layout="wide")
 
+# Initialize session state for results
+if 'result' not in st.session_state:
+    st.session_state.result = None
+if 'origin_coords' not in st.session_state:
+    st.session_state.origin_coords = None
+if 'origin_formatted' not in st.session_state:
+    st.session_state.origin_formatted = None
+if 'dest_coord' not in st.session_state:
+    st.session_state.dest_coord = None
+if 'dest_formatted' not in st.session_state:
+    st.session_state.dest_formatted = None
+if 'num_origins' not in st.session_state:
+    st.session_state.num_origins = None
+
 def geocode_address(gmaps, address):
     """Convert address to lat/lon coordinates."""
     try:
@@ -79,6 +93,8 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
     num_people = len(origin_coords)
     best_candidate = None
     best_cost = float('inf')
+    best_origin_times = None
+    best_dest_time = None
     candidates = generate_candidate_grid(origin_coords, dest_coord, grid_size)
     
     for iteration in range(refine_iterations):
@@ -251,34 +267,58 @@ if st.button("🔍 Find Optimal Meetup Point", type="primary", use_container_wid
             )
             
             if result:
-                st.success("✅ Found optimal meetup point!")
-                st.markdown("---")
-                res_col1, res_col2 = st.columns([2, 1])
-                with res_col1:
-                    st.subheader("📍 Optimal Meetup Location")
-                    lat, lng = result['location']
-                    st.markdown(f"**Coordinates:** `{lat:.6f}, {lng:.6f}`")
-                    maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}"
-                    st.markdown(f"[🗺️ Open in Google Maps]({maps_url})")
-                    m = create_map(origin_coords, origin_formatted, 
-                                  dest_coord, dest_formatted, result['location'])
-                    st_folium(m, width=600, height=400)
-                
-                with res_col2:
-                    st.subheader("⏱️ Drive Times")
-                    st.markdown("**To meetup point:**")
-                    for i, t in enumerate(result['origin_times']):
-                        st.markdown(f"- Person {i+1}: {format_duration(t)}")
-                    st.markdown(f"**Meetup → Destination:** {format_duration(result['destination_time'])}")
-                    st.markdown("---")
-                    st.markdown("**📊 Total Time Analysis**")
-                    individual_total = sum(result['origin_times'])
-                    group_total = len(origins) * result['destination_time']
-                    st.markdown(f"- Sum of drives to meetup: {format_duration(individual_total)}")
-                    st.markdown(f"- Group leg (×{len(origins)}): {format_duration(group_total)}")
-                    st.markdown(f"- **Total person-minutes:** {format_duration(result['total_cost'])}")
+                # Store results in session state
+                st.session_state.result = result
+                st.session_state.origin_coords = origin_coords
+                st.session_state.origin_formatted = origin_formatted
+                st.session_state.dest_coord = dest_coord
+                st.session_state.dest_formatted = dest_formatted
+                st.session_state.num_origins = len(origins)
             else:
                 st.error("Could not find an optimal meetup point. Try adjusting the addresses.")
+                st.session_state.result = None
+
+# Display results from session state (persists across reruns)
+if st.session_state.result:
+    result = st.session_state.result
+    origin_coords = st.session_state.origin_coords
+    origin_formatted = st.session_state.origin_formatted
+    dest_coord = st.session_state.dest_coord
+    dest_formatted = st.session_state.dest_formatted
+    num_origins = st.session_state.num_origins
+    
+    st.success("✅ Found optimal meetup point!")
+    st.markdown("---")
+    res_col1, res_col2 = st.columns([2, 1])
+    
+    with res_col1:
+        st.subheader("📍 Optimal Meetup Location")
+        lat, lng = result['location']
+        st.markdown(f"**Coordinates:** `{lat:.6f}, {lng:.6f}`")
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}"
+        st.markdown(f"[🗺️ Open in Google Maps]({maps_url})")
+        m = create_map(origin_coords, origin_formatted, 
+                      dest_coord, dest_formatted, result['location'])
+        st_folium(m, width=600, height=400, returned_objects=[])
+    
+    with res_col2:
+        st.subheader("⏱️ Drive Times")
+        st.markdown("**To meetup point:**")
+        for i, t in enumerate(result['origin_times']):
+            st.markdown(f"- Person {i+1}: {format_duration(t)}")
+        st.markdown(f"**Meetup → Destination:** {format_duration(result['destination_time'])}")
+        st.markdown("---")
+        st.markdown("**📊 Total Time Analysis**")
+        individual_total = sum(result['origin_times'])
+        group_total = num_origins * result['destination_time']
+        st.markdown(f"- Sum of drives to meetup: {format_duration(individual_total)}")
+        st.markdown(f"- Group leg (×{num_origins}): {format_duration(group_total)}")
+        st.markdown(f"- **Total person-minutes:** {format_duration(result['total_cost'])}")
+    
+    # Clear results button
+    if st.button("🔄 Clear Results"):
+        st.session_state.result = None
+        st.rerun()
 
 st.markdown("---")
 st.markdown("""
