@@ -344,7 +344,7 @@ with st.form("main_form"):
                                 key=f"origin_{i}",
                                 value=default_origins[i],
                                 placeholder="123 Main St, City, State")
-            if addr:
+            if addr.strip():
                 origins.append(addr)
 
     with col2:
