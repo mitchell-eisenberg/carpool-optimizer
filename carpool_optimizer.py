@@ -224,8 +224,14 @@ for everyone, accounting for real-time traffic conditions.
 # Sidebar for API key
 with st.sidebar:
     st.header("⚙️ Settings")
-    api_key = st.text_input("Google Maps API Key", type="password", 
-                            help="Enter your Google Maps API key")
+    
+    # Try to get API key from secrets first, fall back to manual input
+    if 'GOOGLE_MAPS_API_KEY' in st.secrets:
+        api_key = st.secrets['GOOGLE_MAPS_API_KEY']
+        st.success("✅ API key loaded")
+    else:
+        api_key = st.text_input("Google Maps API Key", type="password", 
+                                help="Enter your Google Maps API key")
     st.markdown("---")
     grid_size = st.slider("Grid resolution", 3, 7, 5, 
                           help="Higher = more accurate but more API calls")
