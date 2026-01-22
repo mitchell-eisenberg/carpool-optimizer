@@ -49,26 +49,36 @@ def geocode_address(gmaps, address):
         return None, None
 
 def generate_candidate_grid(origins, destination, grid_size=5):
-    """Generate candidate meetup points between origins centroid and destination."""
+    """Generate candidate meetup points along the corridor from origins to destination."""
     origin_lats = [o[0] for o in origins]
     origin_lngs = [o[1] for o in origins]
     centroid_lat = np.mean(origin_lats)
     centroid_lng = np.mean(origin_lngs)
     dest_lat, dest_lng = destination
-    lat_min = min(centroid_lat, dest_lat, min(origin_lats))
-    lat_max = max(centroid_lat, dest_lat, max(origin_lats))
-    lng_min = min(centroid_lng, dest_lng, min(origin_lngs))
-    lng_max = max(centroid_lng, dest_lng, max(origin_lngs))
-    padding = 0.1
-    lat_range = lat_max - lat_min
-    lng_range = lng_max - lng_min
-    lat_min -= lat_range * padding
-    lat_max += lat_range * padding
-    lng_min -= lng_range * padding
-    lng_max += lng_range * padding
-    lats = np.linspace(lat_min, lat_max, grid_size)
-    lngs = np.linspace(lng_min, lng_max, grid_size)
-    candidates = [(lat, lng) for lat in lats for lng in lngs]
+    
+    # Calculate the spread of origins (to know how wide to make the corridor)
+    origin_spread_lat = max(origin_lats) - min(origin_lats)
+    origin_spread_lng = max(origin_lngs) - min(origin_lngs)
+    corridor_width = max(origin_spread_lat, origin_spread_lng, 0.02) * 1.5
+    
+    # Generate points along the line from centroid to destination
+    candidates = []
+    for t in np.linspace(0, 1, grid_size * 2):  # t=0 is centroid, t=1 is destination
+        center_lat = centroid_lat + t * (dest_lat - centroid_lat)
+        center_lng = centroid_lng + t * (dest_lng - centroid_lng)
+        
+        # Add points in a cross pattern around each center point
+        # Width decreases as we get closer to destination
+        width = corridor_width * (1 - t * 0.5)
+        offsets = np.linspace(-width/2, width/2, grid_size)
+        
+        for offset in offsets:
+            candidates.append((center_lat + offset, center_lng))
+            if offset != 0:
+                candidates.append((center_lat, center_lng + offset))
+    
+    # Remove duplicates
+    candidates = list(set(candidates))
     return candidates
 
 def get_drive_times(gmaps, origins, destinations, departure_time=None):
@@ -114,18 +124,19 @@ def calculate_meetup_cost(origin_times, destination_time, num_people, togetherne
     Calculate total cost with togetherness preference.
     
     togetherness = 0: minimize total person-time (meet near destination)
-    togetherness = 100: maximize driving together (meet near origins)
+    togetherness = 100: maximize driving together (meet near origins, but still toward destination)
     
-    At 0%: cost = sum(individual) + n * group  (standard model)
-    At 100%: cost = heavily penalized individual + ignored group
+    Individual weight increases with togetherness (penalize solo driving).
+    Group weight decreases but never below 1 (destination always matters).
     """
     togetherness_factor = togetherness / 100.0
     
     # As togetherness increases, penalize individual driving more
     individual_weight = 1 + togetherness_factor * num_people
     
-    # As togetherness increases, reduce group leg penalty toward zero
-    group_weight = num_people * (1 - togetherness_factor)
+    # As togetherness increases, reduce group leg penalty, but floor at 1
+    # so the destination always has some pull
+    group_weight = max(1, num_people * (1 - togetherness_factor))
     
     return individual_weight * sum(origin_times) + group_weight * destination_time
 
