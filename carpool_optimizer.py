@@ -4,9 +4,13 @@ import numpy as np
 from datetime import datetime, timedelta
 import folium
 from streamlit_folium import st_folium
+import pytz
 
 # Page config
 st.set_page_config(page_title="Carpool Meetup Optimizer", page_icon="🚗", layout="wide")
+
+# Timezone setup
+DENVER_TZ = pytz.timezone('America/Denver')
 
 # Initialize session state for results
 if 'result' not in st.session_state:
@@ -228,7 +232,7 @@ with st.sidebar:
     refine_iterations = st.slider("Refinement iterations", 1, 3, 2,
                                   help="More iterations = better precision")
     st.markdown("---")
-    togetherness = st.slider("🚗 Group drive preference", 0, 100, 50,
+    togetherness = st.slider("🚗 Group drive preference", 0, 100, 80,
                              help="0% = minimize total time (meet near destination). 100% = maximize time together (meet near origins).")
     st.caption("Low = efficient but separate. High = more carpool time together.")
 
@@ -260,15 +264,16 @@ with col2:
                                placeholder="456 Mountain Rd, City, State")
     st.subheader("🕐 Departure Time")
     use_current_time = st.checkbox("Leave now", value=True)
+    now_denver = datetime.now(DENVER_TZ)
     if not use_current_time:
-        date = st.date_input("Date", datetime.now())
-        time = st.time_input("Time", datetime.now().time())
-        departure_datetime = datetime.combine(date, time)
+        date = st.date_input("Date", now_denver.date())
+        time = st.time_input("Time", now_denver.time())
+        departure_datetime = DENVER_TZ.localize(datetime.combine(date, time))
         # Warn if time is in the past
-        if departure_datetime < datetime.now():
+        if departure_datetime < now_denver:
             st.warning("⚠️ Selected time is in the past — traffic data won't be available.")
     else:
-        departure_datetime = datetime.now() + timedelta(minutes=5)
+        departure_datetime = now_denver + timedelta(minutes=5)
 
 # Calculate button
 if st.button("🔍 Find Optimal Meetup Point", type="primary", use_container_width=True):
@@ -293,7 +298,7 @@ if st.button("🔍 Find Optimal Meetup Point", type="primary", use_container_wid
             dest_coord, dest_formatted = geocode_address(gmaps, destination)
         
         if len(origin_coords) == len(origins) and dest_coord:
-            st.info(f"Searching for optimal meetup point (departure: {departure_datetime.strftime('%Y-%m-%d %H:%M')})...")
+            st.info(f"Searching for optimal meetup point (departure: {departure_datetime.strftime('%Y-%m-%d %I:%M %p %Z')})...")
             result = find_optimal_meetup(
                 gmaps, origin_coords, dest_coord, 
                 departure_datetime, grid_size, refine_iterations, togetherness
@@ -327,10 +332,11 @@ if st.session_state.result:
     st.success("✅ Found optimal meetup point!")
     
     # Show traffic data status
+    departure_display = departure_time_used.strftime('%A %I:%M %p %Z')
     if result.get('traffic_used'):
-        st.info(f"🚦 **Traffic data included** for departure at {departure_time_used.strftime('%A %I:%M %p')}")
+        st.info(f"🚦 **Traffic data included** for departure at {departure_display}")
     else:
-        st.warning(f"⚠️ **No traffic data available** for {departure_time_used.strftime('%A %I:%M %p')} — using typical travel times. Traffic predictions work best within a few hours of now.")
+        st.warning(f"⚠️ **No traffic data available** for {departure_display} — using typical travel times. Traffic predictions work best within a few hours of now.")
     st.markdown("---")
     res_col1, res_col2 = st.columns([2, 1])
     
