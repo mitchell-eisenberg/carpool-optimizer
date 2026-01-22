@@ -223,17 +223,6 @@ with st.sidebar:
     api_key = st.text_input("Google Maps API Key", type="password", 
                             help="Enter your Google Maps API key")
     st.markdown("---")
-    st.markdown("""
-    **How to get an API key:**
-    1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-    2. Create a new project
-    3. Enable these APIs:
-       - Geocoding API
-       - Distance Matrix API
-    4. Create credentials (API key)
-    5. Set up billing (you get $200/month free)
-    """)
-    st.markdown("---")
     grid_size = st.slider("Grid resolution", 3, 7, 5, 
                           help="Higher = more accurate but more API calls")
     refine_iterations = st.slider("Refinement iterations", 1, 3, 2,
@@ -248,11 +237,18 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("📍 Starting Locations")
-    num_origins = st.selectbox("Number of people/cars", [2, 3, 4], index=1)
+    num_origins = st.selectbox("Number of people/cars", [2, 3, 4], index=0)
+    default_origins = [
+        "2278 S Delaware St, Denver, CO 80223",
+        "2301 Florence St, Aurora, CO 80010",
+        "",
+        ""
+    ]
     origins = []
     for i in range(num_origins):
         addr = st.text_input(f"Person {i+1} starting address", 
                             key=f"origin_{i}",
+                            value=default_origins[i],
                             placeholder="123 Main St, City, State")
         if addr:
             origins.append(addr)
@@ -260,6 +256,7 @@ with col1:
 with col2:
     st.subheader("🏁 Destination")
     destination = st.text_input("Final destination address",
+                               value="488 Main St, Black Hawk, CO 80422",
                                placeholder="456 Mountain Rd, City, State")
     st.subheader("🕐 Departure Time")
     use_current_time = st.checkbox("Leave now", value=True)
