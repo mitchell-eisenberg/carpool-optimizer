@@ -21,6 +21,8 @@ if 'dest_formatted' not in st.session_state:
     st.session_state.dest_formatted = None
 if 'num_origins' not in st.session_state:
     st.session_state.num_origins = None
+if 'togetherness' not in st.session_state:
+    st.session_state.togetherness = None
 
 def geocode_address(gmaps, address):
     """Convert address to lat/lon coordinates."""
@@ -84,11 +86,21 @@ def get_drive_times(gmaps, origins, destinations, departure_time=None):
         st.error(f"Distance Matrix API error: {e}")
         return None
 
-def calculate_meetup_cost(origin_times, destination_time, num_people):
-    """Calculate total cost: sum of individual times + n * group leg."""
-    return sum(origin_times) + (num_people * destination_time)
+def calculate_meetup_cost(origin_times, destination_time, num_people, togetherness=0):
+    """
+    Calculate total cost with togetherness preference.
+    
+    togetherness = 0: minimize total person-time (meet near destination)
+    togetherness = 100: prioritize driving together (meet near origins)
+    
+    The multiplier on group leg ranges from n (at 0%) to 1 (at 100%).
+    At 100%, the group drive only "counts once" regardless of passengers.
+    """
+    togetherness_factor = togetherness / 100.0
+    group_multiplier = num_people - togetherness_factor * (num_people - 1)
+    return sum(origin_times) + (group_multiplier * destination_time)
 
-def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_size=5, refine_iterations=2):
+def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_size=5, refine_iterations=2, togetherness=50):
     """Find optimal meetup point using grid search with refinement."""
     num_people = len(origin_coords)
     best_candidate = None
@@ -114,7 +126,7 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
                 time_to_dest = dest_times[i][0]
                 if float('inf') in times_to_candidate or time_to_dest == float('inf'):
                     continue
-                cost = calculate_meetup_cost(times_to_candidate, time_to_dest, num_people)
+                cost = calculate_meetup_cost(times_to_candidate, time_to_dest, num_people, togetherness)
                 if cost < best_cost:
                     best_cost = cost
                     best_candidate = candidate
@@ -209,6 +221,10 @@ with st.sidebar:
                           help="Higher = more accurate but more API calls")
     refine_iterations = st.slider("Refinement iterations", 1, 3, 2,
                                   help="More iterations = better precision")
+    st.markdown("---")
+    togetherness = st.slider("🚗 Group drive preference", 0, 100, 50,
+                             help="0% = minimize total time (meet near destination). 100% = maximize time together (meet near origins).")
+    st.caption("Low = efficient but separate. High = more carpool time together.")
 
 # Main form
 col1, col2 = st.columns(2)
@@ -263,7 +279,7 @@ if st.button("🔍 Find Optimal Meetup Point", type="primary", use_container_wid
             st.info(f"Searching for optimal meetup point (departure: {departure_datetime.strftime('%Y-%m-%d %H:%M')})...")
             result = find_optimal_meetup(
                 gmaps, origin_coords, dest_coord, 
-                departure_datetime, grid_size, refine_iterations
+                departure_datetime, grid_size, refine_iterations, togetherness
             )
             
             if result:
@@ -274,6 +290,7 @@ if st.button("🔍 Find Optimal Meetup Point", type="primary", use_container_wid
                 st.session_state.dest_coord = dest_coord
                 st.session_state.dest_formatted = dest_formatted
                 st.session_state.num_origins = len(origins)
+                st.session_state.togetherness = togetherness
             else:
                 st.error("Could not find an optimal meetup point. Try adjusting the addresses.")
                 st.session_state.result = None
@@ -286,6 +303,7 @@ if st.session_state.result:
     dest_coord = st.session_state.dest_coord
     dest_formatted = st.session_state.dest_formatted
     num_origins = st.session_state.num_origins
+    togetherness = st.session_state.togetherness
     
     st.success("✅ Found optimal meetup point!")
     st.markdown("---")
@@ -308,12 +326,17 @@ if st.session_state.result:
             st.markdown(f"- Person {i+1}: {format_duration(t)}")
         st.markdown(f"**Meetup → Destination:** {format_duration(result['destination_time'])}")
         st.markdown("---")
-        st.markdown("**📊 Total Time Analysis**")
+        st.markdown("**📊 Trip Breakdown**")
         individual_total = sum(result['origin_times'])
-        group_total = num_origins * result['destination_time']
-        st.markdown(f"- Sum of drives to meetup: {format_duration(individual_total)}")
-        st.markdown(f"- Group leg (×{num_origins}): {format_duration(group_total)}")
-        st.markdown(f"- **Total person-minutes:** {format_duration(result['total_cost'])}")
+        group_time = result['destination_time']
+        avg_individual = individual_total / num_origins
+        total_trip_per_person = avg_individual + group_time
+        pct_together = (group_time / total_trip_per_person * 100) if total_trip_per_person > 0 else 0
+        st.markdown(f"- Avg drive to meetup: {format_duration(avg_individual)}")
+        st.markdown(f"- Group drive together: {format_duration(group_time)}")
+        st.markdown(f"- **Time together: {pct_together:.0f}%** of each person's trip")
+        st.markdown("---")
+        st.markdown(f"*Group preference setting: {togetherness}%*")
     
     # Clear results button
     if st.button("🔄 Clear Results"):
