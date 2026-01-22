@@ -265,6 +265,36 @@ with st.sidebar:
         api_key = st.text_input("Google Maps API Key", type="password", 
                                 help="Enter your Google Maps API key")
     st.markdown("---")
+    
+    # Departure time settings (outside form so radio button works dynamically)
+    st.subheader("🕐 Departure Time")
+    now_denver = datetime.now(DENVER_TZ)
+    
+    departure_option = st.radio("When are you leaving?", 
+                                ["Leave now", "Leave later"],
+                                horizontal=True)
+    
+    if departure_option == "Leave later":
+        date = st.date_input("Date", value=now_denver.date())
+        
+        default_time = now_denver.strftime("%H:%M")
+        time_str = st.text_input("Time (24-hour, e.g. 17:30)", 
+                                 value=default_time,
+                                 max_chars=5)
+        
+        try:
+            parsed_time = datetime.strptime(time_str.strip(), "%H:%M").time()
+            departure_datetime = DENVER_TZ.localize(datetime.combine(date, parsed_time))
+            
+            if departure_datetime < now_denver:
+                st.warning("⚠️ Time is in the past")
+        except ValueError:
+            st.error("⚠️ Invalid format (use HH:MM)")
+            departure_datetime = now_denver + timedelta(minutes=5)
+    else:
+        departure_datetime = now_denver + timedelta(minutes=5)
+    
+    st.markdown("---")
     grid_size = st.slider("Grid resolution", 3, 7, 5, 
                           help="Higher = more accurate but more API calls")
     refine_iterations = st.slider("Refinement iterations", 1, 3, 2,
@@ -301,36 +331,6 @@ with st.form("main_form"):
         destination = st.text_input("Final destination address",
                                    value="488 Main St, Black Hawk, CO 80422",
                                    placeholder="456 Mountain Rd, City, State")
-        
-        st.subheader("🕐 Departure Time")
-        now_denver = datetime.now(DENVER_TZ)
-        
-        departure_option = st.radio("When are you leaving?", 
-                                    ["Leave now", "Leave later"],
-                                    horizontal=True)
-        
-        # Always show date/time inputs (ignored if "Leave now" is selected)
-        date = st.date_input("Date", value=now_denver.date())
-        
-        default_time = now_denver.strftime("%H:%M")
-        time_str = st.text_input("Time (24-hour format, e.g. 17:30 for 5:30 PM)", 
-                                 value=default_time,
-                                 max_chars=5)
-        
-        if departure_option == "Leave now":
-            departure_datetime = now_denver + timedelta(minutes=5)
-            st.caption("☝️ Date/time fields above will be ignored")
-        else:
-            # Validate time format
-            try:
-                parsed_time = datetime.strptime(time_str.strip(), "%H:%M").time()
-                departure_datetime = DENVER_TZ.localize(datetime.combine(date, parsed_time))
-                
-                if departure_datetime < now_denver:
-                    st.warning("⚠️ Selected time is in the past — traffic data won't be available.")
-            except ValueError:
-                st.error("⚠️ Invalid time format. Please use HH:MM (e.g. 08:30 or 17:00)")
-                departure_datetime = now_denver + timedelta(minutes=5)
 
     # Submit button inside the form
     submitted = st.form_submit_button("🔍 Find Optimal Meetup Point", type="primary", use_container_width=True)
