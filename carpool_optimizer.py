@@ -309,16 +309,20 @@ with st.form("main_form"):
                                     ["Leave now", "Leave later"],
                                     horizontal=True)
         
-        if departure_option == "Leave later":
-            # Date picker
-            date = st.date_input("Date", value=now_denver.date())
-            
-            # Simple text input for time
-            default_time = now_denver.strftime("%H:%M")
-            time_str = st.text_input("Time (24-hour format, e.g. 17:30 for 5:30 PM)", 
-                                     value=default_time,
-                                     max_chars=5)
-            
+        leave_now = (departure_option == "Leave now")
+        
+        # Always show date/time inputs, but disable them if "Leave now" is selected
+        date = st.date_input("Date", value=now_denver.date(), disabled=leave_now)
+        
+        default_time = now_denver.strftime("%H:%M")
+        time_str = st.text_input("Time (24-hour format, e.g. 17:30 for 5:30 PM)", 
+                                 value=default_time,
+                                 max_chars=5,
+                                 disabled=leave_now)
+        
+        if leave_now:
+            departure_datetime = now_denver + timedelta(minutes=5)
+        else:
             # Validate time format
             try:
                 parsed_time = datetime.strptime(time_str.strip(), "%H:%M").time()
@@ -329,8 +333,6 @@ with st.form("main_form"):
             except ValueError:
                 st.error("⚠️ Invalid time format. Please use HH:MM (e.g. 08:30 or 17:00)")
                 departure_datetime = now_denver + timedelta(minutes=5)
-        else:
-            departure_datetime = now_denver + timedelta(minutes=5)
 
     # Submit button inside the form
     submitted = st.form_submit_button("🔍 Find Optimal Meetup Point", type="primary", use_container_width=True)
