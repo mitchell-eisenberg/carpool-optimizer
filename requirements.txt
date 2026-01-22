@@ -3,3 +3,4 @@ googlemaps==4.10.0
 numpy==1.26.3
 folium==0.15.1
 streamlit-folium==0.18.0
+pytz==2024.1
