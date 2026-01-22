@@ -44,10 +44,6 @@ if 'togetherness' not in st.session_state:
     st.session_state.togetherness = None
 if 'departure_time_used' not in st.session_state:
     st.session_state.departure_time_used = None
-if 'selected_date' not in st.session_state:
-    st.session_state.selected_date = None
-if 'use_current_time' not in st.session_state:
-    st.session_state.use_current_time = True
 
 def geocode_address(gmaps, address):
     """Convert address to lat/lon coordinates."""
