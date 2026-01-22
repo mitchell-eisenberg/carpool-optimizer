@@ -12,7 +12,7 @@ st.set_page_config(page_title="Carpool Meetup Optimizer", page_icon="🚗", layo
 # Timezone setup
 DENVER_TZ = pytz.timezone('America/Denver')
 
-# Custom CSS to make selectbox dropdowns taller (show ~5 items)
+# Custom CSS to make selectbox dropdowns taller
 st.markdown("""
 <style>
     div[data-baseweb="select"] > div {
@@ -253,7 +253,7 @@ Find the optimal meetup point for your carpool that minimizes total drive time
 for everyone, accounting for real-time traffic conditions.
 """)
 
-# Sidebar for API key
+# Sidebar for settings
 with st.sidebar:
     st.header("⚙️ Settings")
     
@@ -274,47 +274,69 @@ with st.sidebar:
                              help="0% = minimize total time (meet near destination). 100% = maximize time together (meet near origins).")
     st.caption("Low = efficient but separate. High = more carpool time together.")
 
-# Main form
-col1, col2 = st.columns(2)
+# Main form - prevents reruns until submit
+with st.form("main_form"):
+    col1, col2 = st.columns(2)
 
-with col1:
-    st.subheader("📍 Starting Locations")
-    num_origins = st.selectbox("Number of people/cars", [2, 3, 4], index=0)
-    default_origins = [
-        "2278 S Delaware St, Denver, CO 80223",
-        "2301 Florence St, Aurora, CO 80010",
-        "",
-        ""
-    ]
-    origins = []
-    for i in range(num_origins):
-        addr = st.text_input(f"Person {i+1} starting address", 
-                            key=f"origin_{i}",
-                            value=default_origins[i],
-                            placeholder="123 Main St, City, State")
-        if addr:
-            origins.append(addr)
+    with col1:
+        st.subheader("📍 Starting Locations")
+        num_origins = st.selectbox("Number of people/cars", [2, 3, 4], index=0)
+        default_origins = [
+            "2278 S Delaware St, Denver, CO 80223",
+            "2301 Florence St, Aurora, CO 80010",
+            "",
+            ""
+        ]
+        origins = []
+        for i in range(num_origins):
+            addr = st.text_input(f"Person {i+1} starting address", 
+                                key=f"origin_{i}",
+                                value=default_origins[i],
+                                placeholder="123 Main St, City, State")
+            if addr:
+                origins.append(addr)
 
-with col2:
-    st.subheader("🏁 Destination")
-    destination = st.text_input("Final destination address",
-                               value="488 Main St, Black Hawk, CO 80422",
-                               placeholder="456 Mountain Rd, City, State")
-    st.subheader("🕐 Departure Time")
-    use_current_time = st.checkbox("Leave now", value=True)
-    now_denver = datetime.now(DENVER_TZ)
-    if not use_current_time:
-        date = st.date_input("Date", now_denver.date())
-        time = st.time_input("Time", now_denver.time())
-        departure_datetime = DENVER_TZ.localize(datetime.combine(date, time))
-        # Warn if time is in the past
-        if departure_datetime < now_denver:
-            st.warning("⚠️ Selected time is in the past — traffic data won't be available.")
-    else:
-        departure_datetime = now_denver + timedelta(minutes=5)
+    with col2:
+        st.subheader("🏁 Destination")
+        destination = st.text_input("Final destination address",
+                                   value="488 Main St, Black Hawk, CO 80422",
+                                   placeholder="456 Mountain Rd, City, State")
+        
+        st.subheader("🕐 Departure Time")
+        now_denver = datetime.now(DENVER_TZ)
+        
+        departure_option = st.radio("When are you leaving?", 
+                                    ["Leave now", "Leave later"],
+                                    horizontal=True)
+        
+        if departure_option == "Leave later":
+            # Date picker
+            date = st.date_input("Date", value=now_denver.date())
+            
+            # Simple text input for time
+            default_time = now_denver.strftime("%H:%M")
+            time_str = st.text_input("Time (24-hour format, e.g. 17:30 for 5:30 PM)", 
+                                     value=default_time,
+                                     max_chars=5)
+            
+            # Validate time format
+            try:
+                parsed_time = datetime.strptime(time_str.strip(), "%H:%M").time()
+                departure_datetime = DENVER_TZ.localize(datetime.combine(date, parsed_time))
+                
+                if departure_datetime < now_denver:
+                    st.warning("⚠️ Selected time is in the past — traffic data won't be available.")
+            except ValueError:
+                st.error("⚠️ Invalid time format. Please use HH:MM (e.g. 08:30 or 17:00)")
+                departure_datetime = now_denver + timedelta(minutes=5)
+        else:
+            departure_datetime = now_denver + timedelta(minutes=5)
 
-# Calculate button
-if st.button("🔍 Find Optimal Meetup Point", type="primary", use_container_width=True):
+    # Submit button inside the form
+    submitted = st.form_submit_button("🔍 Find Optimal Meetup Point", type="primary", use_container_width=True)
+
+# Process form submission (outside the form block)
+if submitted:
     if not api_key:
         st.error("Please enter your Google Maps API key in the sidebar.")
     elif len(origins) < 2:
