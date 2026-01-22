@@ -303,14 +303,23 @@ with st.sidebar:
                                  value=default_time,
                                  max_chars=5)
         
-        try:
-            parsed_time = datetime.strptime(time_str.strip(), "%H:%M").time()
-            departure_datetime = DENVER_TZ.localize(datetime.combine(date, parsed_time))
-            
-            if departure_datetime < now_denver:
-                st.warning("⚠️ Time is in the past")
-        except ValueError:
-            st.error("⚠️ Invalid format (use HH:MM)")
+        # Validate and show status
+        valid_time = False
+        if len(time_str) < 5:
+            st.markdown("🔴 Enter time as HH:MM")
+        else:
+            try:
+                parsed_time = datetime.strptime(time_str.strip(), "%H:%M").time()
+                valid_time = True
+                st.markdown("🟢 Valid time")
+                departure_datetime = DENVER_TZ.localize(datetime.combine(date, parsed_time))
+                
+                if departure_datetime < now_denver:
+                    st.warning("⚠️ Time is in the past")
+            except ValueError:
+                st.markdown("🔴 Invalid format (use HH:MM)")
+        
+        if not valid_time:
             departure_datetime = now_denver + timedelta(minutes=5)
     else:
         departure_datetime = now_denver + timedelta(minutes=5)
