@@ -68,7 +68,7 @@ def generate_candidate_grid(origins, destination, grid_size=5):
     # Calculate the spread of origins (to know how wide to make the corridor)
     origin_spread_lat = max(origin_lats) - min(origin_lats)
     origin_spread_lng = max(origin_lngs) - min(origin_lngs)
-    corridor_width = max(origin_spread_lat, origin_spread_lng, 0.02) * 1.5
+    corridor_width = max(origin_spread_lat, origin_spread_lng, 0.02) * 1.2
     
     # Generate points along the line from centroid to destination
     candidates = []
@@ -88,7 +88,29 @@ def generate_candidate_grid(origins, destination, grid_size=5):
     
     # Remove duplicates
     candidates = list(set(candidates))
-    return candidates
+    
+    # Filter: only keep candidates that are between origins and destination
+    # Check that candidate is not "behind" all origins (further from dest than all origins)
+    def distance_sq(p1, p2):
+        return (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2
+    
+    origin_distances = [distance_sq(origin, destination) for origin in origins]
+    max_origin_dist = max(origin_distances)
+    centroid_dist = distance_sq((centroid_lat, centroid_lng), destination)
+    
+    filtered = []
+    for candidate in candidates:
+        candidate_to_dest = distance_sq(candidate, destination)
+        # Keep if candidate is closer to destination than the centroid
+        # This ensures we're always making forward progress
+        if candidate_to_dest <= centroid_dist * 1.05:
+            filtered.append(candidate)
+    
+    # If filter removed too many, fall back to all candidates
+    if len(filtered) < 10:
+        return candidates
+    
+    return filtered
 
 def get_drive_times(gmaps, origins, destinations, departure_time=None):
     """Get drive times matrix using Distance Matrix API."""
@@ -157,6 +179,21 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
     best_origin_times = None
     best_dest_time = None
     any_traffic_used = False
+    
+    # Helper to check if a point is "on the way"
+    def distance_sq(p1, p2):
+        return (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2
+    
+    centroid_lat = np.mean([o[0] for o in origin_coords])
+    centroid_lng = np.mean([o[1] for o in origin_coords])
+    centroid_dist = distance_sq((centroid_lat, centroid_lng), dest_coord)
+    
+    def is_valid_candidate(candidate):
+        """Check if candidate is between origins and destination (not backwards)."""
+        candidate_to_dest = distance_sq(candidate, dest_coord)
+        # Must be closer to destination than centroid (making forward progress)
+        return candidate_to_dest <= centroid_dist * 1.05
+    
     candidates = generate_candidate_grid(origin_coords, dest_coord, grid_size)
     
     for iteration in range(refine_iterations):
@@ -174,6 +211,9 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
             if traffic1 or traffic2:
                 any_traffic_used = True
             for i, candidate in enumerate(batch):
+                # Skip candidates that are backwards
+                if not is_valid_candidate(candidate):
+                    continue
                 times_to_candidate = [origin_times[j][i] for j in range(num_people)]
                 time_to_dest = dest_times[i][0]
                 if float('inf') in times_to_candidate or time_to_dest == float('inf'):
@@ -193,7 +233,8 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
             lng_range = 0.02 / (iteration + 1)
             lats = np.linspace(lat - lat_range, lat + lat_range, grid_size)
             lngs = np.linspace(lng - lng_range, lng + lng_range, grid_size)
-            candidates = [(la, ln) for la in lats for ln in lngs]
+            # Filter refinement candidates too
+            candidates = [(la, ln) for la in lats for ln in lngs if is_valid_candidate((la, ln))]
     
     if best_candidate:
         return {
