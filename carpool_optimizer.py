@@ -23,6 +23,8 @@ if 'num_origins' not in st.session_state:
     st.session_state.num_origins = None
 if 'togetherness' not in st.session_state:
     st.session_state.togetherness = None
+if 'departure_time_used' not in st.session_state:
+    st.session_state.departure_time_used = None
 
 def geocode_address(gmaps, address):
     """Convert address to lat/lon coordinates."""
@@ -62,29 +64,40 @@ def generate_candidate_grid(origins, destination, grid_size=5):
 def get_drive_times(gmaps, origins, destinations, departure_time=None):
     """Get drive times matrix using Distance Matrix API."""
     try:
+        # Convert datetime to Unix timestamp for API
+        if departure_time:
+            if hasattr(departure_time, 'timestamp'):
+                departure_timestamp = int(departure_time.timestamp())
+            else:
+                departure_timestamp = departure_time
+        else:
+            departure_timestamp = None
+        
         result = gmaps.distance_matrix(
             origins=origins,
             destinations=destinations,
             mode="driving",
-            departure_time=departure_time,
+            departure_time=departure_timestamp,
             traffic_model="best_guess"
         )
         times = []
+        traffic_used = False
         for row in result['rows']:
             row_times = []
             for element in row['elements']:
                 if element['status'] == 'OK':
                     if 'duration_in_traffic' in element:
                         row_times.append(element['duration_in_traffic']['value'])
+                        traffic_used = True
                     else:
                         row_times.append(element['duration']['value'])
                 else:
                     row_times.append(float('inf'))
             times.append(row_times)
-        return times
+        return times, traffic_used
     except Exception as e:
         st.error(f"Distance Matrix API error: {e}")
-        return None
+        return None, False
 
 def calculate_meetup_cost(origin_times, destination_time, num_people, togetherness=0):
     """
@@ -107,6 +120,7 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
     best_cost = float('inf')
     best_origin_times = None
     best_dest_time = None
+    any_traffic_used = False
     candidates = generate_candidate_grid(origin_coords, dest_coord, grid_size)
     
     for iteration in range(refine_iterations):
@@ -115,12 +129,14 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
         batch_size = 10
         for batch_start in range(0, len(candidates), batch_size):
             batch = candidates[batch_start:batch_start + batch_size]
-            origin_times = get_drive_times(gmaps, origin_coords, batch, departure_time)
+            origin_times, traffic1 = get_drive_times(gmaps, origin_coords, batch, departure_time)
             if origin_times is None:
                 continue
-            dest_times = get_drive_times(gmaps, batch, [dest_coord], departure_time)
+            dest_times, traffic2 = get_drive_times(gmaps, batch, [dest_coord], departure_time)
             if dest_times is None:
                 continue
+            if traffic1 or traffic2:
+                any_traffic_used = True
             for i, candidate in enumerate(batch):
                 times_to_candidate = [origin_times[j][i] for j in range(num_people)]
                 time_to_dest = dest_times[i][0]
@@ -148,7 +164,8 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
             'location': best_candidate,
             'total_cost': best_cost,
             'origin_times': best_origin_times,
-            'destination_time': best_dest_time
+            'destination_time': best_dest_time,
+            'traffic_used': any_traffic_used
         }
     return None
 
@@ -250,6 +267,9 @@ with col2:
         date = st.date_input("Date", datetime.now())
         time = st.time_input("Time", datetime.now().time())
         departure_datetime = datetime.combine(date, time)
+        # Warn if time is in the past
+        if departure_datetime < datetime.now():
+            st.warning("⚠️ Selected time is in the past — traffic data won't be available.")
     else:
         departure_datetime = datetime.now() + timedelta(minutes=5)
 
@@ -291,6 +311,7 @@ if st.button("🔍 Find Optimal Meetup Point", type="primary", use_container_wid
                 st.session_state.dest_formatted = dest_formatted
                 st.session_state.num_origins = len(origins)
                 st.session_state.togetherness = togetherness
+                st.session_state.departure_time_used = departure_datetime
             else:
                 st.error("Could not find an optimal meetup point. Try adjusting the addresses.")
                 st.session_state.result = None
@@ -304,8 +325,15 @@ if st.session_state.result:
     dest_formatted = st.session_state.dest_formatted
     num_origins = st.session_state.num_origins
     togetherness = st.session_state.togetherness
+    departure_time_used = st.session_state.departure_time_used
     
     st.success("✅ Found optimal meetup point!")
+    
+    # Show traffic data status
+    if result.get('traffic_used'):
+        st.info(f"🚦 **Traffic data included** for departure at {departure_time_used.strftime('%A %I:%M %p')}")
+    else:
+        st.warning(f"⚠️ **No traffic data available** for {departure_time_used.strftime('%A %I:%M %p')} — using typical travel times. Traffic predictions work best within a few hours of now.")
     st.markdown("---")
     res_col1, res_col2 = st.columns([2, 1])
     
