@@ -158,21 +158,24 @@ def find_optimal_meetup(gmaps, origin_coords, dest_coord, departure_time, grid_s
     best_dest_time = None
     any_traffic_used = False
     
-    # Helper to check if a point is "on the way"
-    def distance_sq(p1, p2):
-        return (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2
-    
-    # Find the furthest origin from destination
-    origin_distances = [distance_sq(o, dest_coord) for o in origin_coords]
-    max_origin_dist = max(origin_distances)
-    
     def is_valid_candidate(candidate):
-        """Check if candidate doesn't make anyone go backwards."""
-        candidate_to_dest = distance_sq(candidate, dest_coord)
-        # Must be closer to destination than the furthest origin
-        # This ensures at least one person isn't going backwards
-        # Small buffer (1.02) to allow for edge cases
-        return candidate_to_dest <= max_origin_dist * 1.02
+        """
+        Check if candidate is in the 'forward direction' for all origins.
+        Uses dot product to ensure no one is going backwards.
+        """
+        for origin in origin_coords:
+            # Vector from origin to destination
+            to_dest = (dest_coord[0] - origin[0], dest_coord[1] - origin[1])
+            # Vector from origin to candidate
+            to_candidate = (candidate[0] - origin[0], candidate[1] - origin[1])
+            
+            # Dot product - positive means candidate is in the forward half-plane
+            dot_product = to_dest[0] * to_candidate[0] + to_dest[1] * to_candidate[1]
+            
+            # If negative, this person would be going backwards
+            if dot_product < 0:
+                return False
+        return True
     
     candidates = generate_candidate_grid(origin_coords, dest_coord, grid_size)
     
