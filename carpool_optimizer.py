@@ -325,39 +325,35 @@ with st.sidebar:
                              help="0% = minimize total time (meet near destination). 100% = maximize time together (meet near origins).")
     st.caption("Low = efficient but separate. High = more carpool time together.")
 
-# Main form - prevents reruns until submit
-with st.form("main_form"):
-    col1, col2 = st.columns(2)
+# Main inputs
+col1, col2 = st.columns(2)
 
-    with col1:
-        st.subheader("📍 Starting Locations")
-        num_origins = st.selectbox("Number of people/cars", [2, 3, 4], index=0)
-        default_origins = [
-            "2278 S Delaware St, Denver, CO 80223",
-            "2301 Florence St, Aurora, CO 80010",
-            "",
-            ""
-        ]
-        origins = []
-        for i in range(num_origins):
-            addr = st.text_input(f"Person {i+1} starting address", 
-                                key=f"origin_{i}",
-                                value=default_origins[i],
-                                placeholder="123 Main St, City, State")
-            if addr.strip():
-                origins.append(addr)
+with col1:
+    st.subheader("📍 Starting Locations")
+    num_origins = st.selectbox("Number of people/cars", [2, 3, 4], index=0)
+    default_origins = [
+        "2278 S Delaware St, Denver, CO 80223",
+        "2301 Florence St, Aurora, CO 80010",
+        "",
+        ""
+    ]
+    origins = []
+    for i in range(num_origins):
+        addr = st.text_input(f"Person {i+1} starting address", 
+                            key=f"origin_{i}",
+                            value=default_origins[i],
+                            placeholder="123 Main St, City, State")
+        if addr.strip():
+            origins.append(addr)
 
-    with col2:
-        st.subheader("🏁 Destination")
-        destination = st.text_input("Final destination address",
-                                   value="488 Main St, Black Hawk, CO 80422",
-                                   placeholder="456 Mountain Rd, City, State")
+with col2:
+    st.subheader("🏁 Destination")
+    destination = st.text_input("Final destination address",
+                               value="488 Main St, Black Hawk, CO 80422",
+                               placeholder="456 Mountain Rd, City, State")
 
-    # Submit button inside the form
-    submitted = st.form_submit_button("🔍 Find Optimal Meetup Point", type="primary", use_container_width=True)
-
-# Process form submission (outside the form block)
-if submitted:
+# Calculate button
+if st.button("🔍 Find Optimal Meetup Point", type="primary", use_container_width=True):
     if not api_key:
         st.error("Please enter your Google Maps API key in the sidebar.")
     elif len(origins) < 2:
